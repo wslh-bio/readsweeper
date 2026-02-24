@@ -82,7 +82,6 @@ workflow READSWEEPER {
         ch_kraken2_db = UNTAR_KRAKEN2_DB.out.untar.map { it[1] }
         ch_versions   = ch_versions.mix(UNTAR_KRAKEN2_DB.out.versions.first())
 
-        ch_versions.view()
         //
         // MODULE: Run Kraken2
         //
@@ -132,7 +131,11 @@ workflow READSWEEPER {
         def clean_read2_count = clean_counts[1]       
         return [sample_id, raw_read1_count, raw_read2_count, clean_read1_count, clean_read2_count]
     }
+    
+    //ch_read_counts_summary.collectFile(name: 'read_counts_summary.tsv', storeDir: "${params.outdir}/report")
+    
 
+    
     //
     // Collate and save software versions
     //
@@ -203,9 +206,16 @@ workflow READSWEEPER {
         []
     )
 
-    emit:multiqc_report = MULTIQC.out.report.toList() // channel: /path/to/multiqc_report.html
+    emit:
+    ch_read_counts_summary.collectFile(name: 'read_counts_summary.tsv', storeDir: "${params.outdir}/report", sort: true, newLine: true), emit: read_counts_summary
+    multiqc_report = MULTIQC.out.report.toList() // channel: /path/to/multiqc_report.html
     versions       = ch_versions                 // channel: [ path(versions.yml) ]
 
+}
+
+output {
+    multiqc_report
+    versions
 }
 
 /*

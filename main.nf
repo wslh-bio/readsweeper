@@ -39,7 +39,8 @@ workflow WSLHBIO_READSWEEPER {
         samplesheet
     )
     emit:
-    multiqc_report = READSWEEPER.out.multiqc_report // channel: /path/to/multiqc_report.html
+    reports        = READSWEEPER.out.reports        // channel: CSV reports (for human-read-scrubbing)
+    versions       = READSWEEPER.out.versions       // channel: [ path(versions.yml) ]
 }
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -81,7 +82,7 @@ workflow {
         params.outdir,
         params.monochrome_logs,
         params.hook_url,
-        WSLHBIO_READSWEEPER.out.multiqc_report
+        WSLHBIO_READSWEEPER.out.reports
     )
 }
 

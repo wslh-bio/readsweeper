@@ -1,28 +1,40 @@
 process HUMAN_SCRUBBER_REPORT {
     tag "$meta.id"
-    label 'process_low'
+    label 'process_single'
+
 
     conda "${moduleDir}/environment.yml"
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
-        'https://community-cr-prod.seqera.io/docker/registry/v2/blobs/sha256/0f/0f827dcea51be6b5c32255167caa2dfb65607caecdc8b067abd6b71c267e2e82/data' :
-        'community.wave.seqera.io/library/kraken2_coreutils_pigz:920ecc6b96e2ba71' }"
+        'https://depot.galaxyproject.org/singularity/python:3.9--1' :
+        'biocontainers/python:3.9--1' }"
 
     input:
-    tuple val(meta), path(read_counts)
-    tuple val(meta), path(report_file)
+    tuple val(meta), path(raw_reads)
+    tuple val(meta), path(clean_reads)
+    tuple val(meta), path(kraken_report)
 
     output:
-    tuple val(meta), path "${report_file}", emit: report
+    tuple val(meta), path("*_final_report.csv"), emit: report
+    path "versions.yml"                         , emit: versions
 
     when:
-    params.human_scrubber_report
+    task.ext.when == null || task.ext.when
 
     script:
+    def args = task.ext.args ?: ''
+    def prefix = task.ext.prefix ?: "${meta.id}"
     """
     human_scrubber_report.py \\
-        --read-counts ${read_counts} \\
-        --kraken2-report ${report_file} \\
-        --output ${report_file}
-    """
-}   
+        $args \\
+        --sample_id ${meta.id} \\
+        --raw_reads $raw_reads \\
+        --clean_reads $clean_reads \\
+        --kraken_report $kraken_report \\
+        --output ${prefix}_final_report.csv
 
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        python: \$(python --version | sed 's/Python //')
+    END_VERSIONS
+    """
+}

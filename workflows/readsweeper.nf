@@ -42,14 +42,23 @@ workflow READSWEEPER {
         true
     )
     ch_versions = ch_versions.mix(KRAKEN2_KRAKEN2.out.versions.first())
-
+    
+    // Capture Kraken2 outputs for use in downstream modules and merge for human scrubber report
+    ch_kraken2_unclassified = KRAKEN2_KRAKEN2.out.unclassified_reads_fastq
+    ch_kraken2_report = KRAKEN2_KRAKEN2.out.report
+    
+    ch_merged = ch_samplesheet
+        .join(ch_kraken2_unclassified)
+        .join(ch_kraken2_report)
+        .map { meta, raw_reads, clean_reads, kraken_report ->
+            tuple(meta, raw_reads, clean_reads, kraken_report)
+        } 
+    
     //
     // MODULE: Generate human scrubber report
     //
     HUMAN_SCRUBBER_REPORT (
-        ch_samplesheet,
-        KRAKEN2_KRAKEN2.out.unclassified_reads_fastq,
-        KRAKEN2_KRAKEN2.out.report
+        ch_merged
     )
     ch_versions = ch_versions.mix(HUMAN_SCRUBBER_REPORT.out.versions.first())
     
@@ -57,9 +66,11 @@ workflow READSWEEPER {
     // MODULE: Combine reports into single report for easier human readability
     //
     COMBINE_REPORTS (
-        HUMAN_SCRUBBER_REPORT.out.report.map { it[1] }.collect()
-    )    
-
+        HUMAN_SCRUBBER_REPORT.out.report
+            .map { it[1] }
+            .collect()
+            .map { files -> [ [id: workflow.runName], files ] }
+    )
     emit:
     reports = COMBINE_REPORTS.out.combined_report
     versions = ch_versions

@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
-
-import sys
-import os
-import gzip
-import csv
-import logging
 import argparse
+import csv
+import gzip
+import logging
+import sys
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s : %(message)s")
+
+FIELDS = [
+    "sample_id",
+    "raw_read_1", "raw_read_2",
+    "clean_read_1", "clean_read_2",
+    "unclassified_reads", "unclassified_reads_pct",
+    "human_reads", "human_reads_pct",
+]
+
 
 def count_reads(path):
     """Count reads in FASTQ."""
@@ -21,18 +28,18 @@ def count_reads(path):
         sys.exit(1)
 
     if lines % 4:
-        logging.warning(f"FASTQ not divisible by 4 (possible malformed): {path}")
+        logging.error(f"FASTQ not divisible by 4 (possible malformed): {path}")
 
     return lines // 4
 
 
 def parse_kraken_report(path):
-    """Extract unclassified + human read stats from Kraken2 report."""
+    """Extract unclassified and human read stats from Kraken2 report."""
     stats = {
-        "unclassified_reads": 0,
+        "unclassified_reads":     0,
         "unclassified_reads_pct": 0.0,
-        "human_reads": 0,
-        "human_reads_pct": 0.0,
+        "human_reads":            0,
+        "human_reads_pct":        0.0,
     }
 
     try:
@@ -43,42 +50,33 @@ def parse_kraken_report(path):
                     continue
 
                 try:
-                    pct = float(parts[0])
+                    pct   = float(parts[0])
                     reads = int(parts[1])
                 except ValueError:
                     continue
 
-                rank, taxid = parts[3], parts[4]
+                rank, taxid = parts[3].strip(), parts[4].strip()
 
                 if rank == "U":
-                    stats["unclassified_reads"] = reads
+                    stats["unclassified_reads"]     = reads
                     stats["unclassified_reads_pct"] = pct
 
                 if taxid == "9606":
-                    stats["human_reads"] = reads
+                    stats["human_reads"]     = reads
                     stats["human_reads_pct"] = pct
 
     except Exception as e:
         logging.error(f"Cannot parse Kraken report {path}: {e}")
         sys.exit(1)
-
+    logging.info(f"Parsed Kraken report")
     return stats
-
 
 
 def write_csv(path, row):
     """Write a single-row CSV."""
-    fields = [
-        "sample_id",
-        "raw_read_1", "raw_read_2",
-        "clean_read_1", "clean_read_2",
-        "unclassified_reads", "unclassified_reads_pct",
-        "human_reads", "human_reads_pct",
-    ]
-
     try:
         with open(path, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=fields)
+            writer = csv.DictWriter(f, fieldnames=FIELDS)
             writer.writeheader()
             writer.writerow(row)
     except Exception as e:
@@ -89,25 +87,25 @@ def write_csv(path, row):
 
 
 def process(raw, clean, kraken, output, sample_id):
-    logging.info("Counting FASTQ reads")
+    """Main processing function. """
+
+    logging.info("Counting reads")
     raw_counts = [count_reads(f) for f in raw]
     clean_counts = [count_reads(f) for f in clean]
 
     logging.info("Parsing Kraken2 report")
     stats = parse_kraken_report(kraken)
 
-    sample_id = sample_id or os.path.basename(output).replace("_final_report.csv", "")
-
     row = {
-        "sample_id": sample_id,
-        "raw_read_1": raw_counts[0] if raw_counts else 0,
-        "raw_read_2": raw_counts[1] if len(raw_counts) > 1 else 0,
-        "clean_read_1": clean_counts[0] if clean_counts else 0,
-        "clean_read_2": clean_counts[1] if len(clean_counts) > 1 else 0,
-        "unclassified_reads": stats["unclassified_reads"],
+        "sample_id":              sample_id,
+        "raw_read_1":             raw_counts[0] if raw_counts else 0,
+        "raw_read_2":             raw_counts[1] if len(raw_counts) > 1 else 0,
+        "clean_read_1":           clean_counts[0] if clean_counts else 0,
+        "clean_read_2":           clean_counts[1] if len(clean_counts) > 1 else 0,
+        "unclassified_reads":     stats["unclassified_reads"],
         "unclassified_reads_pct": round(stats["unclassified_reads_pct"], 2),
-        "human_reads": stats["human_reads"],
-        "human_reads_pct": round(stats["human_reads_pct"], 2),
+        "human_reads":            stats["human_reads"],
+        "human_reads_pct":        round(stats["human_reads_pct"], 2),
     }
 
     write_csv(output, row)
